@@ -26,7 +26,7 @@ ego_OF <- enrichGO(gene          = gene_OF,
                 qvalueCutoff  = 0.1,
                 readable      = TRUE)
 go_df_OF <- as.data.frame(ego_OF@result)
-
+write.csv(go_df_OF, "/home/kaliki_sci/Hamsters_transcriptome/worms_time/GO_OV_l2fc1.csv")
 go_df_OF <- distinct(go_df_OF, geneID, .keep_all = TRUE)
 go_df_20_OF <- go_df_OF[1:20,]
 des_OF <- go_df_20_OF$Description
