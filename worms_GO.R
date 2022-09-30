@@ -4,10 +4,25 @@ library(pheatmap)
 library(org.Mm.eg.db)
 library(clusterProfiler)
 library(viridis)
+
+norm_counts <- as.data.frame(counts(dds, normalized=TRUE)) # DESeq2-normalized counts: Median of ratios method https://hbctraining.github.io/DGE_workshop/lessons/02_DGE_count_normalization.html
+
+res <- rownames_to_column(norm_counts)
+
 mm <- org.Mm.eg.db
-dds_wt <- DESeq(dds)
+entrez <- AnnotationDbi::select(mm, 
+                                keys = res$rowname,
+                                columns = c("ENTREZID", "SYMBOL"),
+                                keytype = "SYMBOL")
+entrez <- distinct(entrez, SYMBOL, .keep_all = TRUE) #removes duplicate entries if there was multiple mapping
+res$entrez <- entrez$ENTREZID
+write.csv(res, "/home/kaliki_sci/Hamsters_transcriptome/worms_time/entrezid_results.csv", row.names = FALSE)
+
+dds_wt <- DESeq(dds) # test = "Wald"
 OF_control <- results(dds_wt, contrast=list(c("worms_OF_vs_control")), alpha = 0.05)
 write.csv(OF_control, "/home/kaliki_sci/Hamsters_transcriptome/worms_time/OF_control_Wald.csv", row.names = TRUE)
+
+# В таблице entrezid_results.csv оставить только столбцы OF и control, добавить столбец log2FoldChanges из OF_control_Wald.csv
 OF_norm_count <- read.csv("/home/kaliki_sci/Hamsters_transcriptome/worms_time/entrezid_results_OF.csv")
 OF_norm_count <- filter(OF_norm_count, entrez != "NA")
 geneList_OF <- OF_norm_count$log2FoldChange
