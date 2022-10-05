@@ -28,17 +28,19 @@ OF_norm_count <- filter(OF_norm_count, entrez != "NA")
 geneList_OF <- OF_norm_count$log2FoldChange
 names(geneList_OF) = as.character(OF_norm_count$entrez) 
 gene_OF <- dplyr::filter(OF_norm_count, abs(log2FoldChange) > 1)
+gene_OF <- gene_OF$entrez
 
 kk <- enrichKEGG(gene         = gene_OF,
                   organism     = 'mmu',
                   pvalueCutoff = 0.05)
 kegg_df_OF <- as.data.frame(kk@result)
+write.csv(kegg_df_OF, "/home/kaliki_sci/Hamsters_transcriptome/worms_time/KEGG_OF_l2fc1.csv")
 kegg_df_OF <- distinct(kegg_df_OF, geneID, .keep_all = TRUE)
 kegg_df_20_OF <- kegg_df_OF[1:20,]
 des_OF <- kegg_df_20_OF$Description
 des_OF <- rev(des_OF)
 kegg_df_20_OF$Description <- factor(kegg_df_20_OF$Description, levels = kegg_df_20_OF$Description[order(-(kegg_df_20_OF$pvalue))])
-png(filename="/home/kaliki_sci/Hamsters_transcriptome/worms_time/OF_kegg_plot_l2fc1_BP.png", width=8, height=6, units="in", res=300)
+png(filename="/home/kaliki_sci/Hamsters_transcriptome/worms_time/OF_KEGG_plot_l2fc1_BP.png", width=8, height=6, units="in", res=300)
 ggplot(kegg_df_20_OF, aes(Description, Count, fill=p.adjust)) + 
      geom_col() +
      coord_flip() +
