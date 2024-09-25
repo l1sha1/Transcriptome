@@ -1,0 +1,197 @@
+input_mat = t(rld_mat)
+
+#library(WGCNA)
+allowWGCNAThreads()          # allow multi-threading (optional)
+#> Allowing multi-threading with up to 4 threads.
+
+# Choose a set of soft-thresholding powers
+powers = c(c(1:10), seq(from = 12, to = 20, by = 2))
+
+# Call the network topology analysis function
+sft = pickSoftThreshold(
+  input_mat, networkType = "signed hybrid", RsquaredCut = 0.8,            # <= Input data
+  #blockSize = 30,
+  powerVector = powers,
+  verbose = 5
+  )
+#> pickSoftThreshold: will use block size 5486.
+#>  pickSoftThreshold: calculating connectivity for given powers...
+#>    ..working on genes 1 through 5486 of 5486
+#>    Power SFT.R.sq  slope truncated.R.sq mean.k. median.k. max.k.
+#> 1      1   0.5350  2.500          0.960  1940.0    1950.0   2840
+#> 2      2   0.0642  0.331          0.897   964.0     927.0   1860
+#> 3      3   0.1680 -0.444          0.859   560.0     505.0   1340
+#> 4      4   0.5050 -0.822          0.906   358.0     300.0   1030
+#> 5      5   0.6800 -1.070          0.935   243.0     189.0    819
+#> 6      6   0.7770 -1.230          0.954   173.0     125.0    673
+#> 7      7   0.8330 -1.310          0.972   127.0      85.3    564
+#> 8      8   0.8660 -1.390          0.980    96.4      60.2    484
+#> 9      9   0.8810 -1.450          0.981    74.8      43.2    422
+#> 10    10   0.8940 -1.490          0.984    59.1      31.7    371
+#> 11    12   0.9070 -1.540          0.988    38.7      17.6    295
+#> 12    14   0.9150 -1.580          0.988    26.7      10.3    240
+#> 13    16   0.9220 -1.570          0.985    19.1       6.3    200
+#> 14    18   0.9200 -1.570          0.979    14.1       4.0    169
+#> 15    20   0.9240 -1.570          0.982    10.7       2.6    145
+
+par(mfrow = c(1,2));
+cex1 = 0.9;
+
+plot(sft$fitIndices[, 1],
+     -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2],
+     xlab = "Soft Threshold (power)",
+     ylab = "Scale Free Topology Model Fit, signed R^2",
+     main = paste("Scale independence")
+)
+text(sft$fitIndices[, 1],
+     -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2],
+     labels = powers, cex = cex1, col = "red"
+)
+abline(h = 0.90, col = "red")
+plot(sft$fitIndices[, 1],
+     sft$fitIndices[, 5],
+     xlab = "Soft Threshold (power)",
+     ylab = "Mean Connectivity",
+     type = "n",
+     main = paste("Mean connectivity")
+)
+text(sft$fitIndices[, 1],
+     sft$fitIndices[, 5],
+     labels = powers,
+     cex = cex1, col = "red")
+
+picked_power = 9
+temp_cor <- cor       
+cor <- WGCNA::cor         # Force it to use WGCNA cor function (fix a namespace conflict issue)
+netwk <- blockwiseModules(input_mat,                # <= input here
+
+                          # == Adjacency Function ==
+                          power = picked_power,                # <= power here
+                          networkType = "signed",
+
+                          # == Tree and Block Options ==
+                          deepSplit = 2,
+                          pamRespectsDendro = F,
+                          # detectCutHeight = 0.75,
+                          minModuleSize = 30,
+                          maxBlockSize = 4000,
+
+                          # == Module Adjustments ==
+                          reassignThreshold = 0,
+                          mergeCutHeight = 0.25,
+
+                          # == TOM == Archive the run results in TOM file (saves time)
+                          saveTOMs = T,
+                          saveTOMFileBase = "ER",
+
+                          # == Output Options
+                          numericLabels = T,
+                          verbose = 3)
+
+# Convert labels to colors for plotting
+mergedColors = labels2colors(netwk$colors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(
+  netwk$dendrograms[[1]],
+  mergedColors[netwk$blockGenes[[1]]],
+  "Module colors",
+  dendroLabels = FALSE,
+  hang = 0.03,
+  addGuide = TRUE,
+  guideHang = 0.05 )
+
+module_df <- data.frame(
+  gene_id = names(netwk$colors),
+  colors = labels2colors(netwk$colors)
+)
+
+module_df[1:5,]
+#>            gene_id    colors
+#> 1 AC149818.2_FG001      blue
+#> 2 AC149829.2_FG003      blue
+#> 3 AC182617.3_FG001      blue
+#> 4 AC186512.3_FG001 turquoise
+#> 5 AC186512.3_FG007 turquoise
+
+write_delim(module_df,
+            file = "gene_modules.txt",
+            delim = "\t")
+
+We have written out a tab delimited file listing the genes and their modules. However, we need to figure out which modules are associated with each trait/treatment group. WGCNA will calcuate an Eigangene (hypothetical central gene) for each module, so it easier to determine if modules are associated with different treatments.
+
+
+# Get Module Eigengenes per cluster
+MEs0 <- moduleEigengenes(input_mat, mergedColors)$eigengenes
+
+# Reorder modules so similar modules are next to each other
+MEs0 <- orderMEs(MEs0)
+module_order = names(MEs0) %>% gsub("ME","", .)
+
+# Add treatment names
+MEs0$treatment = row.names(MEs0)
+
+# tidy & plot data
+mME = MEs0 %>%
+  pivot_longer(-treatment) %>%
+  mutate(
+    name = gsub("ME", "", name),
+    name = factor(name, levels = module_order)
+  )
+
+mME %>% ggplot(., aes(x=treatment, y=name, fill=value)) +
+  geom_tile() +
+  theme_bw() +
+  scale_fill_gradient2(
+    low = "blue",
+    high = "red",
+    mid = "white",
+    midpoint = 0,
+    limit = c(-1,1)) +
+  theme(axis.text.x = element_text(angle=90)) +
+  labs(title = "Module-trait Relationships", y = "Modules", fill="corr")
+
+
+moduleTraitCor = cor(MEs0, cond, use= "p")
+
+par(mar = c(6, 8.5, 3, 3));
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = moduleTraitCor,
+xLabels = names(datTraits),
+yLabels = names(MEs),
+ySymbols = names(MEs),
+colorLabels = FALSE,
+colors = greenWhiteRed(50),
+textMatrix = textMatrix,
+setStdMargins = FALSE,
+cex.text = 0.85,
+zlim = c(-1,1),
+main = paste("Module-trait relationships"))
+
+
+textMatrix <- round(moduleTraitCor, 2)
+
+colnames(MEs0) <- gsub("ME", "", colnames(MEs0))
+
+textMatrix_sig <- replace(textMatrix_sig, abs(textMatrix_sig) <= 0.3, NA)
+
+
+# выбрать строки из большой таблице по другой таблице
+sign_mat_rld <- subset(mat_rld, rownames(mat_rld) %in% names)
+
+
+
+
+# Heatmap with labels (corr coefficient <> 0.3)
+mME_copy[,3] <- replace(mME_copy[,3], abs(mME_copy[,3]) <= 0.3, NA)
+
+mME %>% ggplot(., aes(x=treatment, y=name, fill=value)) +
+     geom_tile() + geom_text(aes(label = round(mME_copy$value, 2)), size = 2.5) +
+     theme_bw() +
+     scale_fill_gradient2(
+         low = "blue",
+         high = "red",
+         mid = "white",
+         midpoint = 0,
+        limit = c(-1,1)) +
+     theme(axis.text.x = element_text(angle=90)) +
+     labs(title = "Module-trait Relationships", y = "Modules", fill="corr")
